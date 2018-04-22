@@ -1,19 +1,24 @@
-FROM debian:jessie
-MAINTAINER Jan Broer <janeczku@yahoo.de>
+FROM python:2
+
+ARG APT_PROXY
+RUN set -x && [ -z "$APT_PROXY" ] || /bin/echo -e "Acquire::HTTP::Proxy \"$APT_PROXY\";\nAcquire::HTTPS::Proxy \"$APT_PROXY\";\nAcquire::http::Pipeline-Depth \"23\";" > /etc/apt/apt.conf.d/01proxy
+
 ENV DEBIAN_FRONTEND noninteractive
 
-# Following 'How do I add or remove Dropbox from my Linux repository?' - https://www.dropbox.com/en/help/246
-RUN echo 'deb http://linux.dropbox.com/debian jessie main' > /etc/apt/sources.list.d/dropbox.list \
-	&& apt-key adv --keyserver pgp.mit.edu --recv-keys 1C61A2656FB57B7E4DE0F4C1FC918B335044912E \
-	&& apt-get -qqy update \
-	# Note 'ca-certificates' dependency is required for 'dropbox start -i' to succeed
-	&& apt-get -qqy install ca-certificates curl python-gpgme dropbox \
-	# Perform image clean up.
+RUN set -x \
+	&& apt-get -q update \
+	&& apt-get -qqy install ca-certificates curl g++ libgpgme11-dev libgpgme11 \
 	&& apt-get -qqy autoclean \
-	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
-	# Create service account and set permissions.
+	&& rm -rf /var/lib/apt/lists/* \
 	&& groupadd dropbox \
-	&& useradd -m -d /dbox -c "Dropbox Daemon Account" -s /usr/sbin/nologin -g dropbox dropbox
+	&& useradd -m -d /dbox -c "Dropbox Daemon Account" -s /usr/sbin/nologin -g dropbox dropbox \
+	&& curl -sL 'https://www.dropbox.com/download?dl=packages/dropbox.py' -o /usr/bin/dropbox \
+	&& chmod +x /usr/bin/dropbox \
+	&& pip install pygpgme \
+	&& apt-get -y --purge autoremove g++ libgpgme11-dev \
+	&& rm -rf /tmp/* /var/tmp/*
+
+ENV HOME /dbox
 
 # Dropbox is weird: it insists on downloading its binaries itself via 'dropbox
 # start -i'. So we switch to 'dropbox' user temporarily and let it do its thing.
